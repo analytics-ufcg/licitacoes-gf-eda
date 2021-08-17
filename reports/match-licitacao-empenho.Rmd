@@ -24,53 +24,92 @@ paleta = c("#404E4D",
            "#F4743B")
 ```
 
+```{r read}
+lics = read_csv(
+    here::here("data/ready/licitacoes-portal.csv"),
+    col_types = cols(
+        .default = col_character(),
+        valor_licitacao = col_double(),
+        data_resultado_compra = col_date(),
+        data_abertura = col_date()
+    )
+)
+
+empsrel = read_csv(
+    here::here("data/ready/empenhosrelacionados-portal.csv"),
+    col_types = cols(
+        .default = col_character(),
+        data_emissao_empenho = col_date(),
+        valor_empenho_r = col_double()
+    )
+)
+```
+
+
 
 ```{r}
-lics = read_csv2("data/raw-portal/202101_Licitacoes/utf8-202101_Licita‡ֶo.csv")
-empsrel = read_csv2("data/raw-portal/202101_Licitacoes/utf8-202101_EmpenhosRelacionados.csv")
-
-lics20 = read_csv2("data/raw-portal/202001_Licitacoes/utf8-202001_Licita‡ֶo.csv")
-empsrel20 = read_csv2("data/raw-portal/202001_Licitacoes/utf8-202001_EmpenhosRelacionados.csv")
-    
-licst = bind_rows(jan2021 = lics, 
-                  jan2020 = lics20, 
-                  .id = "ano")
-empsrelt = bind_rows(jan2021 = empsrel, 
-                     jan2020 = empsrel20, 
-                     .id = "ano")
-
-licst %>% count(ano)
-empsrelt %>% count(ano)
-
-licst %>% count(`Situação Licitação`, ano)
+# Apenas órgão superiores federais
+lics_f = lics %>% 
+    filter(as.numeric(codigo_orgao_superior) %% 1000 == 0, 
+           as.numeric(codigo_orgao_superior) > 2e4, as.numeric(codigo_orgao_superior) < 9e4)
 ```
 
 ```{r}
-les =  licst %>% left_join(empsrelt) %>% janitor::clean_names()
+les =  lics_f %>% left_join(
+    empsrel,
+    by = c(
+        "numero_licitacao",
+        "codigo_ug",
+        "nome_ug",
+        "codigo_modalidade_compra",
+        "modalidade_compra",
+        "numero_processo"
+    )
+)
 
 com_empenho = les %>%
-    group_by(numero_licitacao, modalidade_compra, ano, situacao_licitacao) %>%
+    mutate(ano = str_sub(arquivo.x, 1, 4), 
+           mes = str_sub(arquivo.x, 5, 6)) %>% 
+    group_by(numero_licitacao, modalidade_compra, arquivo.x, situacao_licitacao, mes, ano) %>%
     summarise(tem_empenho = if_else(any(!is.na(codigo_empenho)), "Sim", "Não"),
               .groups = "drop") %>%
-    count(modalidade_compra, tem_empenho, ano, situacao_licitacao)
+    count(modalidade_compra, tem_empenho, mes, ano, situacao_licitacao)
 
 com_empenho %>%
     filter(situacao_licitacao %in% c("Encerrado", 
                                      "Publicado", 
-                                     "Evento de Resultado de Julgame")) %>%
-    ggplot(aes(x = modalidade_compra, y = n, fill = tem_empenho)) +
-    facet_grid(situacao_licitacao ~ ano) +
+                                     "Evento de Resultado de Julgame"), 
+           (grepl("Pregão|Licitação", modalidade_compra))) %>%
+    ggplot(aes(x = reorder(modalidade_compra, n), y = n, fill = tem_empenho)) +
+    facet_grid(mes ~ ano) +
+    geom_col() +
+    scale_fill_manual(values = c("brown", "gray")) +
+    coord_flip() + 
+    labs(x = "", y = "Número de licitações", fill = "Tem empenho associado?", 
+         title = "Licitações sem empenhos no Portal", 
+         subtitle = "Modalidades mais comuns, situação encerrado, publicado ou com evento de julgamento")
+
+ggsave("empenhos-modalidade.png", height = 10, width = 10)
+```
+
+```{r}
+com_empenho %>%
+    filter(situacao_licitacao %in% c("Encerrado", 
+                                     "Publicado", 
+                                     "Evento de Resultado de Julgame"), 
+           (grepl("Pregão|Licitação", modalidade_compra))) %>%
+    ggplot(aes(x = reorder(modalidade_compra, n), y = n, fill = tem_empenho)) +
+    facet_grid(mes ~ ano) +
     geom_col() +
     scale_fill_manual(values = c("brown", "gray")) +
     coord_flip() + 
     labs(x = "", y = "Número de licitações", fill = "Tem empenho associado?")
 
-ggsave("empenhos.png", height = 8, width = 9)
+ggsave("empenhos-junto.png", height = 8, width = 9)
 ```
+
 
 
 ```{r read}
 empenhos = read_csv(here::here("data/raw/despesa_empenho.csv.gz"))
-
-
 ```
