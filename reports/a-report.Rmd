@@ -1,0 +1,71 @@
+---
+title: "REPLACE ME"
+output:
+    html_document:
+    df_print: paged
+theme: sandstone
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(viridis)
+library(hrbrthemes)
+theme_set(theme_ipsum_rc())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      fig.width = 6,
+                      fig.height = 5,
+                      echo = FALSE)
+
+paleta = c("#404E4D",
+           "#92DCE5",
+           "#938BA1",
+           "#2D3142",
+           "#F4743B")
+```
+
+```{r read}
+dados = read_csv(here::here("data/raw/despesa_item_empenho.csv.gz"))
+
+empenhos = read_csv(here::here("data/raw/despesa_empenho.csv.gz"))
+```
+
+```{r}
+glimpse(dados)
+```
+
+```{r}
+glimpse(empenhos)
+```
+
+
+```{r}
+azeites = dados %>% 
+    filter(grepl("azeite de oliva", str_to_lower(item)))
+```
+
+```{r}
+azeites %>% 
+    count(marca, unidade, sort = T)
+```
+
+```{r}
+azeites %>% 
+    filter(marca == "FAISÃO") %>% 
+    select(id_empenho, quantidade, valor_unitario)
+
+azeites %>% 
+    filter(marca == "DO CHEFE") %>% 
+    count(valor_unitario)
+```
+```{r}
+azeites %>% 
+    filter(str_to_lower(unidade) == "litro") %>% 
+    count(marca, valor_unitario)
+```
+```{r}
+emp_azeit = azeites %>% 
+    inner_join(empenhos)
+```
+
