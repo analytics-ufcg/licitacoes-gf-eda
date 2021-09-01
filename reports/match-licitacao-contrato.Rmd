@@ -1,0 +1,234 @@
+---
+title: "Licitações e contratos"
+output:
+    html_document:
+    df_print: paged
+theme: sandstone
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(hrbrthemes)
+theme_set(theme_ipsum_rc())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      fig.width = 6,
+                      fig.height = 4,
+                      echo = FALSE)
+
+paleta = c("#404E4D",
+           "#92DCE5",
+           "#938BA1",
+           "#2D3142",
+           "#F4743B")
+```
+
+```{r read}
+lics = read_csv(
+    here::here("data/ready/licitacoes-portal.csv"),
+    col_types = cols(
+        .default = col_character(),
+        valor_licitacao = col_double(),
+        data_resultado_compra = col_date(),
+        data_abertura = col_date()
+    )
+)
+
+compras = read_csv(
+    here::here("data/ready/compras-portal.csv"),
+    col_types = cols(
+        .default = col_character(),
+        data_assinatura_contrato = col_date(format = ""),
+        data_publicacao_dou = col_date(format = ""),
+        data_inicio_vigencia = col_date(format = ""),
+        data_fim_vigencia = col_date(format = ""),
+        valor_inicial_compra = col_double(),
+        valor_final_compra = col_double(),
+    )
+)
+```
+
+
+
+```{r}
+# Apenas órgão superiores federais
+lics_f = lics %>% 
+    filter(as.numeric(codigo_orgao_superior) %% 1000 == 0, 
+           as.numeric(codigo_orgao_superior) > 2e4, as.numeric(codigo_orgao_superior) < 9e4)
+```
+
+```{r}
+compras %>% 
+    count(arquivo)
+```
+
+
+```{r}
+lec =  lics_f %>% left_join(
+    compras,
+    by = c(
+        "numero_licitacao",
+        "codigo_ug",
+        "nome_ug",
+        "codigo_orgao_superior",
+        "nome_orgao_superior",
+        "codigo_orgao",
+        "nome_orgao",
+        "modalidade_compra"
+    ),
+    suffix = c("_lici", "_compra")
+)
+```
+
+IMPORTANTE: Com que chave podemos ligar a licitação à compra? Não há número do processo na compra, e há licitações com mesmo número e unidade gestora.
+
+
+```{r}
+lics
+```
+
+
+```{r}
+lics_f %>%
+    count(
+        numero_licitacao,
+        codigo_ug,
+        nome_ug,
+        codigo_orgao_superior,
+        nome_orgao_superior,
+        codigo_orgao,
+        nome_orgao, 
+        sort = T
+    ) %>%
+    filter(n > 1)
+```
+
+```{r}
+lics_f %>% 
+    filter(numero_licitacao == "000012019", nome_ug == "CENTRO PREPARACAO OFICIAIS RESERVA/RECIFE") %>% 
+    count(numero_licitacao, nome_ug, sort = T)
+```
+
+
+```{r}
+com_compras = lec %>%
+    mutate(ano = str_sub(arquivo_lici, 1, 4),
+           mes = str_sub(arquivo_lici, 5, 6)) %>%
+    group_by(numero_processo,
+             modalidade_compra,
+             arquivo_lici,
+             situacao_licitacao,
+             mes,
+             ano) %>%
+    summarise(tem_compra = if_else(any(!is.na(numero_do_contrato)), "Sim", "Não"),
+              .groups = "drop") %>%
+    count(tem_compra, mes, ano, situacao_licitacao, modalidade_compra)
+
+com_compras %>%
+    filter(situacao_licitacao %in% c("Encerrado", 
+                                     "Publicado", 
+                                     "Evento de Resultado de Julgame"), 
+           (grepl("Pregão|Licitação", modalidade_compra))) %>%
+    ggplot(aes(x = reorder(modalidade_compra, n), y = n, fill = tem_compra)) +
+    facet_grid(mes ~ ano) +
+    geom_col() +
+    scale_fill_manual(values = c("darkorange", "gray")) +
+    coord_flip() + 
+    labs(x = "", y = "Número de licitações", fill = "Tem compra associada?", 
+         title = "Licitações com/sem contratos (compras) no Portal", 
+         subtitle = "Modalidades mais comuns, situação encerrado, publicado ou com evento de julgamento")
+
+ggsave("compras-modalidade-mes.png", height = 12, width = 9)
+```
+
+```{r}
+com_compras %>%
+    filter(situacao_licitacao %in% c("Encerrado", 
+                                     "Publicado", 
+                                     "Evento de Resultado de Julgame"), 
+           (grepl("Pregão|Licitação", modalidade_compra))
+           ) %>%
+    ggplot(aes(x = reorder(modalidade_compra, n), y = n, fill = tem_compra)) +
+    facet_grid(. ~ ano) +
+    geom_col() +
+    scale_fill_manual(values = c("darkorange", "gray")) +
+    coord_flip() + 
+    labs(x = "", y = "Número de licitações", fill = "Tem compra associada?", 
+         title = "Licitações com/sem contratos (compras) no Portal", 
+         subtitle = "Modalidades mais comuns, situação encerrado, publicado ou com evento de julgamento")
+
+ggsave("compras-modalidade-agregado.png", height = 12, width = 9)
+```
+
+
+```{r}
+agregado = lec %>%
+    mutate(ano = str_sub(arquivo_lici, 1, 4),
+           mes = str_sub(arquivo_lici, 5, 6)) %>%
+    group_by(numero_processo,
+             modalidade_compra,
+             arquivo_lici,
+             situacao_licitacao,
+             mes,
+             ano) %>%
+    summarise(tem_compra = if_else(any(!is.na(numero_do_contrato)), "Sim", "Não"),
+              .groups = "drop") %>%
+    count(tem_compra, ano, mes)
+
+agregado %>% 
+    ggplot(aes(x = as.Date(paste(ano, mes, "01", sep = "-")), y = n, fill = tem_compra)) + 
+    geom_col() + 
+    scale_fill_manual(values = c("darkorange", "gray")) +
+    labs(
+        x = "Mês", 
+        y = "Licitações", 
+        fill = "Tem contrato"
+    )
+```
+
+```{r fig.width=8}
+lecs2 = lec %>%
+    group_by(
+        numero_processo,
+        numero_licitacao,
+        modalidade_compra,
+        situacao_licitacao,
+        arquivo_lici
+    ) %>%
+    summarise(tem_compra = any(!is.na(numero_do_contrato)), .groups = "drop")
+
+les2 = les %>% group_by(numero_licitacao,
+                        numero_processo,
+             modalidade_compra,
+             situacao_licitacao,
+             arquivo.x) %>% summarise(tem_empenho = any(!is.na(codigo_empenho)),
+              .groups = "drop")
+
+tudo = lecs2 %>% 
+    left_join(les2)
+
+tudo %>% 
+    mutate(ano = str_sub(arquivo_lici, 1, 4),
+           mes = str_sub(arquivo_lici, 5, 6), 
+           data = as.Date(paste(ano, mes, "01", sep = "-"))) %>%
+    mutate(dados = case_when(
+        (tem_compra & tem_empenho) ~ "Com Contrato e com empenho",
+        ((!tem_compra) & tem_empenho) ~ "Sem contrato e com empenho",
+        (tem_compra & (!tem_empenho) )~ "Com contrato e sem empenho",
+        ((!tem_compra) & (!tem_empenho)) ~ "Sem contrato sem empenho"
+    ), .groups = "drop") %>% 
+    count(data, dados) %>% 
+    ggplot(aes(x = data, y = n, fill = dados)) + 
+    geom_col() + 
+    scale_fill_manual(values = c("#8D6C8F", "#7bb3d1", "#dd7c8a", "#dddddd")) + 
+    labs(
+        x = "Mês", 
+        y = "Licitações", 
+        fill = "Tem contrato"
+    )
+
+ggsave("licitacoes-empenhos-contratos.png", width = 8, height = 4)
+```
+
+

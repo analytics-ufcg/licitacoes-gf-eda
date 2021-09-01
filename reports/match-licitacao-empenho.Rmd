@@ -55,6 +55,15 @@ lics_f = lics %>%
 ```
 
 ```{r}
+lics_f %>% 
+    count(modalidade_compra)
+
+lics_f %>% 
+    count(situacao_licitacao)
+```
+
+
+```{r}
 les =  lics_f %>% left_join(
     empsrel,
     by = c(
@@ -72,7 +81,7 @@ com_empenho = les %>%
            mes = str_sub(arquivo.x, 5, 6)) %>% 
     group_by(numero_licitacao, modalidade_compra, arquivo.x, situacao_licitacao, mes, ano) %>%
     summarise(tem_empenho = if_else(any(!is.na(codigo_empenho)), "Sim", "Não"),
-              .groups = "drop") %>%
+              .groups = "drop") %>% 
     count(modalidade_compra, tem_empenho, mes, ano, situacao_licitacao)
 
 com_empenho %>%
@@ -91,6 +100,32 @@ com_empenho %>%
 
 ggsave("empenhos-modalidade.png", height = 10, width = 10)
 ```
+
+```{r fig.width=9}
+agregado = les %>%
+    mutate(ano = str_sub(arquivo.x, 1, 4),
+           mes = str_sub(arquivo.x, 5, 6)) %>%
+    group_by(numero_licitacao,
+             modalidade_compra,
+             arquivo.x,
+             situacao_licitacao,
+             mes,
+             ano) %>%
+    summarise(tem_empenho = if_else(any(!is.na(codigo_empenho)), "Sim", "Não"),
+              .groups = "drop") %>%
+    count(tem_empenho, ano, mes)
+
+agregado %>% 
+    ggplot(aes(x = as.Date(paste(ano, mes, "01", sep = "-")), y = n, fill = tem_empenho)) + 
+    geom_col() +
+    scale_fill_manual(values = c("brown", "gray")) +
+    labs(
+        x = "Mês", 
+        y = "Licitações", 
+        fill = "Tem empenho"
+    )
+```
+
 
 ```{r}
 com_empenho %>%
