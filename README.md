@@ -7,7 +7,7 @@ Para obter os dados:
 ```
 mkdir -p data/raw-portal
 cd data/raw-portal
-../../code/fetch_data.sh
+../../code/fetch_dados.sh
 cd -
 ./code/import_licitacoes.R
 ```

@@ -48,11 +48,35 @@ raw2ready_emps_relac = function(dir_pai = "data/raw-portal/") {
         write_csv(here::here("data/ready/empenhosrelacionados-portal.csv"))
 }
 
+raw2ready_compras = function(dir_pai = "data/raw-portal/") {
+    mascara = "*/utf8*Compras.csv"
+    col_types = cols(
+        .default = col_character(),
+        `Data Assinatura Contrato` = col_date(format = "%d/%M/%Y"),
+        `Data Publicação DOU` = col_date(format = "%d/%M/%Y"),
+        `Data Início Vigência` = col_date(format = "%d/%M/%Y"),
+        `Data Fim Vigência` = col_date(format = "%d/%M/%Y"),
+        `Valor Inicial Compra` = col_double(),
+        `Valor Final Compra` = col_double()
+    )
+    
+    raw = read_batch(dir_pai, mascara, col_types = col_types)
+    
+    ready = raw %>%
+        mutate(arquivo = str_extract(path, "\\d{6}_Compras")) %>%
+        select(-path)
+    
+    ready %>%
+        write_csv(here::here("data/ready/compras-portal.csv"))
+}
+
 main <- function(argv = NULL) {
     raw2ready_licitacoes()
     message("Licitações ready")
     raw2ready_emps_relac()
     message("Empenhos Relacionados ready")
+    raw2ready_compras()
+    message("Compras ready")
 }
 
 if (!interactive()) {
