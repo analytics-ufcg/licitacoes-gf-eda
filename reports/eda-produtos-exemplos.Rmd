@@ -1,0 +1,182 @@
+---
+title: "REPLACE ME"
+output:
+    html_document:
+    df_print: paged
+theme: sandstone
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(viridis)
+library(hrbrthemes)
+theme_set(theme_ipsum_rc())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      # fig.width = 6,
+                      # fig.height = 5,
+                      echo = FALSE)
+
+paleta = c("#404E4D",
+           "#92DCE5",
+           "#938BA1",
+           "#2D3142",
+           "#F4743B")
+```
+
+```{r read}
+# dados = read_csv(here::here("data/raw/despesa_item_empenho.csv.gz"))
+
+dados = read_csv("../../brasilio-transparencia-gov/data/output/despesa_item_empenho.csv.gz")
+
+empenhos = read_csv(here::here("data/raw/despesa_empenho.csv.gz"))
+```
+
+```{r}
+glimpse(dados)
+```
+
+```{r}
+empenhos %>% 
+    filter(codigo == "110001000012020NE802672")
+
+dados %>% 
+    filter(codigo_empenho == "110001000012020NE802672")
+```
+```{r}
+empenhos %>% 
+    count(tipo, especie)
+```
+
+
+```{r}
+glimpse(empenhos)
+```
+
+```{r}
+mascaras = dados %>% 
+    filter(str_detect(item, "M?SCARA"), 
+           str_detect(descricao, "N95|PFF"))
+```
+
+```{r}
+mascarasl = mascaras %>% 
+    mutate(unidade = str_to_lower(str_trim(unidade)))
+
+mascarasl %>% 
+    count(item)
+```
+
+```{r}
+mascarasl %>%
+    filter(
+        unidade == "unidade",
+        valor_unitario > quantile(valor_unitario, .05),
+        valor_unitario < quantile(valor_unitario, .95)
+    ) %>%
+    ggplot(aes(y = "", x = valor_unitario)) +
+    geom_boxplot(
+        width = .1,
+        coef = 1000,
+        position = position_nudge(.2),
+        color = "grey"
+    ) + 
+    geom_point(shape = 124,
+               alpha = .8,
+               color = "cornflowerblue") +
+    NULL
+```
+
+```{r}
+mes = mascarasl %>% 
+    mutate(across(matches("codigo"), as.character)) %>% 
+    left_join(empenhos, by = c("codigo_empenho" = "codigo"), suffix = c("_nota", "_empenho"))
+```
+
+```{r}
+mes %>%
+    filter(
+        unidade == "unidade",
+        valor_unitario > quantile(valor_unitario, .05),
+        valor_unitario < quantile(valor_unitario, .95), 
+        !is.na(orgao)
+    ) %>%
+    group_by(orgao_superior) %>% 
+    mutate(orgao_superior = str_glue("{orgao_superior} (n={n()})"), n = n()) %>% 
+    ungroup() %>% 
+    filter(n > 10) %>% 
+    ggplot(aes(y = reorder(orgao_superior, valor_unitario, median), x = valor_unitario)) +
+    geom_boxplot(
+        width = .3,
+        coef = 1000,
+        position = position_nudge(.2),
+        color = "grey"
+    ) + 
+    geom_point(shape = 124,
+               alpha = .7,
+               color = "brown") +
+    stat_summary(geom = "point", shape = 124, size = 2, color = "black", fun = median) + 
+    labs(x = "Valor unitário (R$)", y = "", 
+         title = "Compras de máscaras PPF2/N95", 
+         subtitle = "Dados do Portal de Transparência do GF",
+         caption = "Um ponto é uma nota de empenho. Apenas compras por unidade e órgãos ao menos 10 notas.")
+```
+
+```{r}
+library(zoo)
+
+mes %>%
+    filter(
+        unidade == "unidade",
+        valor_unitario > quantile(valor_unitario, .05),
+        valor_unitario < quantile(valor_unitario, .95), 
+        !is.na(orgao)
+    ) %>%
+    mutate(data = lubridate::dmy(data_emissao), 
+           mes = lubridate::floor_date(data, unit = "months")) %>% 
+    ggplot(aes(x = data, y = valor_unitario, group = mes)) +
+    geom_point(size = .8,
+               alpha = .4,
+               color = "cornflowerblue") +
+    geom_line(aes(y=rollmedian(valor_unitario, 51, na.pad=TRUE)), color = "gray20") +
+    scale_y_log10() +
+    labs(y = "Valor unitário (R$)", y = "Data do empenho", 
+         title = "Preço de máscaras PPF2/N95 ao longo do tempo", 
+         subtitle = "Dados do Portal de Transparência do GF",
+         caption = "Um ponto é uma nota de empenho. Linha é mediana móvel de 51 compras.")
+```
+
+
+
+```{r}
+azeites = dados %>% 
+    # filter(str_detect(descricao, "azeite de oliva"))
+    filter(item == "AZEITE OLIVA")
+```
+
+```{r}
+azeites %>% 
+    count(marca, unidade, sort = T)
+```
+
+```{r}
+azeites %>% 
+    filter(marca == "FAISÃO") %>% 
+    select(codigo_empenho, quantidade, valor_unitario)
+
+azeites %>% 
+    # filter(marca == "BOM SABOR") %>% 
+    mutate(descricao = str_extract(descricao, " [\\s\\S]*$")) %>% 
+    count(descricao, valor_unitario) %>% View
+```
+```{r}
+azeites %>% 
+    filter(str_to_lower(unidade) == "litro") %>% 
+    count(marca, valor_unitario)
+```
+```{r}
+emp_azeit = azeites %>% 
+    inner_join(empenhos)
+```
+
